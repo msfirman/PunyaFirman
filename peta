@@ -1,0 +1,859 @@
+package com.buatanku.mygps;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import android.support.v4.app.Fragment;
+import android.app.Activity;
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PointF;
+import android.os.Bundle;
+import android.util.FloatMath;
+import android.util.Log;
+import android.view.GestureDetector.OnGestureListener;
+import android.view.ScaleGestureDetector.OnScaleGestureListener;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.Spinner;
+import android.widget.Toast;
+import android.os.Build;
+import android.view.View.OnTouchListener;
+
+public class MyGPSActivity extends Activity {
+
+	 private Paint mPaint;
+     private Bitmap  mBitmap;
+     private Canvas  mCanvas;
+     private Path    mPath;
+     private Paint   mBitmapPaint;
+
+	 float Mx1,My1;
+	 float x,y;
+	 int warnaGelapBG = android.R.color.darker_gray;
+	 int warnaTerangBG = android.R.color.background_light;
+	 int warnaLatar = warnaGelapBG;
+	 int jumRedraw = 0;	 
+	 int jumMove = 0;
+	 boolean ubahSkala = false;
+	 
+	 boolean pertama = true;
+     private float scale = 1f;
+   	 float skalax = 2000.0f;  // 120
+   	 float skalay = 2000.0f;
+     MyView view1;
+     
+ 	long startTime=System.currentTimeMillis();
+ 	//constant for defining the time duration between the click that can be considered as double-tap
+ 	static final int MAX_DURATION = 200;
+
+ 	private Spinner spinner1, spinner2, spinner3;
+ 	private Button btnSubmit;
+    private String asal, tujuan, teknik; 
+    private List<String> list1 = new ArrayList<String>();
+    private List<String> list2 = new ArrayList<String>();
+    private int wlebar, htinggi;
+    private boolean sudahSize = false;
+ 
+    
+    
+    void init_layar_kedua() {
+        setContentView(R.layout.activity_my_gps);
+        
+    	addItemsOnSpinner2();
+    	addListenerOnButton();
+    	addListenerOnSpinnerItemSelection();     
+    }
+    
+	
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);       
+     
+        Context c;
+  
+        //--------------------
+        
+        //MyView 
+        view1 =new MyView(this);
+        //view1.setBackgroundResource(R.drawable.imageku);
+        //warnaLatar = android.R.color.background_dark;
+        view1.setBackgroundResource(warnaLatar);
+        setContentView(view1);
+       
+        c = getApplicationContext();        
+        setTitle ("Ini Line Draw GPS yang baru");
+        view1.setOnTouchListener(new MyScaleGesturesX(c));
+                
+    }
+
+    private void init_paint() {
+        mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        mPaint.setAntiAlias(true);
+        mPaint.setDither(true);
+        mPaint.setColor(0xffff0000); //merah;
+        mPaint.setStyle(Paint.Style.STROKE);
+        mPaint.setStrokeJoin(Paint.Join.ROUND);
+        mPaint.setStrokeWidth(1 / getResources().getDisplayMetrics().density);       
+        
+	}
+
+
+	@Override
+    public void onPause() {
+        super.onPause();  // Always call the superclass method first
+    }
+
+	@Override
+    public void onResume() {
+        super.onResume();   // Always call the superclass method first
+
+         init_paint();
+         jumRedraw = 0;
+    }
+
+	
+    
+ // add items into spinner dynamically
+    public void addItemsOnSpinner2() {
+
+    view1.isi_list(list1, list2);
+
+  	spinner2 = (Spinner) findViewById(R.id.spinner1);  	
+  	ArrayAdapter<String> dataAdapter1 = new ArrayAdapter<String>(this,
+  		android.R.layout.simple_spinner_item, list1);
+  	dataAdapter1.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+  	spinner2.setAdapter(dataAdapter1);
+    
+    
+  	spinner2 = (Spinner) findViewById(R.id.spinner2);  	
+  	ArrayAdapter<String> dataAdapter2 = new ArrayAdapter<String>(this,
+  		android.R.layout.simple_spinner_item, list2);
+  	dataAdapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+  	spinner2.setAdapter(dataAdapter2);
+  	
+    }
+   
+    public void addListenerOnSpinnerItemSelection() {
+  	spinner1 = (Spinner) findViewById(R.id.spinner1);
+  	spinner1.setOnItemSelectedListener(new CustomOnItemSelectedListener());
+    }
+   
+    // get the selected dropdown list value
+    public void addListenerOnButton() {
+   
+  	spinner1 = (Spinner) findViewById(R.id.spinner1);
+  	spinner2 = (Spinner) findViewById(R.id.spinner2);
+  	spinner3 = (Spinner) findViewById(R.id.spinner3);
+  	btnSubmit = (Button) findViewById(R.id.btnSubmit);
+   
+  	btnSubmit.setOnClickListener(new OnClickListener() {
+  		
+	    @Override
+  	    public void onClick(View view) {
+	    	asal =  String.valueOf(spinner1.getSelectedItem()); 
+            tujuan = String.valueOf(spinner2.getSelectedItem());
+            teknik = String.valueOf(spinner3.getSelectedItem());           
+
+ 		    // sebelum view1 atau peta ditampilkan, proseslah jalur yang akan dilewati
+ 		    // dengan menggunakan algoritma Dijkstra atau lainnya
+ 		    view1.proses(asal, tujuan, teknik); 		    
+ 		    setContentView(view1);  // pindah ke tampilan peta
+ 		    //view1.tayang_peta();
+  		 }
+  		});
+    }            
+    
+    //-----------------------
+    public class MyScaleGesturesX implements OnTouchListener, OnScaleGestureListener {
+
+    	private View view;
+    	private ScaleGestureDetector gestureScale;
+    	private float scaleFactor = 1;
+    	private Context mycontext;
+    	private boolean inScale = false;
+    	private Integer inScaleCnt = 0;
+    	
+    	MyScaleGesturesX(Context c){
+    		mycontext = c;
+    	    gestureScale = new ScaleGestureDetector(c, this);
+    	}
+
+    	private void debugtoast(String msg) {
+    	    Toast.makeText(mycontext, msg, Toast.LENGTH_SHORT).show();
+    	}
+
+
+
+    	@Override
+    	public boolean onTouch(View view, MotionEvent event) {
+    	    this.view = view; 
+    	    gestureScale.onTouchEvent(event);
+    	       	    
+            float x = event.getX();
+            float y = event.getY();
+            float scale;
+            boolean doubletap = false;
+
+            switch (event.getAction()) {  
+                case MotionEvent.ACTION_DOWN:
+                    view1.touch_start(x, y);
+                    view1.invalidate();
+                    break;
+                    
+                case MotionEvent.ACTION_MOVE:
+                    view1.touch_move(x, y);
+                    view1.invalidate();                    
+                    break;
+                    
+                case MotionEvent.ACTION_UP:
+                      view1.touch_up();                    
+                      view1.invalidate();     
+                    break;
+            }
+    	    
+    	    return true;
+    	}   
+
+
+
+    	@Override
+    	public boolean onScale(ScaleGestureDetector detector) {
+    	       Float faktor = detector.getScaleFactor();	
+    	       scale *= faktor;
+    	       scale = Math.max(0.1f, Math.min(scale, 5.0f));
+    	       
+    	       skalax *= faktor;
+    	       skalay *= faktor;    	       
+   	    
+               inScaleCnt++;
+    	        
+    	    return true;
+    	}
+
+    	@Override
+    	public boolean onScaleBegin(ScaleGestureDetector detector) {
+    	    //Logger.Log(Log.DEBUG, "onScaleBegin");
+    	    inScale = true;
+    	    inScaleCnt = 1;
+    	    
+    	    return true;
+    	}
+
+    	@Override
+    	public void onScaleEnd(ScaleGestureDetector detector) {
+    	    //Logger.Log(Log.DEBUG, "onScaleEnd");
+    	    inScale = false;
+    	    Float skala=skalax;
+    	   
+    	    jumRedraw = -1;
+    	    ubahSkala = true;
+     	    
+    	}
+    }
+    
+    
+    //-----------------------
+
+    public class MyView extends View  {
+
+        private static final float MINP = 0.25f;
+        private static final float MAXP = 0.75f;
+
+        private boolean debug = false;
+        private boolean baruMulai = false;
+        private boolean tampiltext = true;
+        
+        //private Path garisPath;
+        private int clickCount = 0;
+        //variable for storing the time of first click
+        private long startTime;
+        //variable for calculating the total time
+        private long duration;
+        //constant for defining the time duration between the click that can be considered as double-tap
+        static final int MAX_DURATION = 500;
+        
+        private Context mycontext;
+        
+        
+     //-----------------------------------
+     // These matrices will be used to move and zoom image
+        Matrix matrix = new Matrix();
+        Matrix savedMatrix = new Matrix();
+
+        // We can be in one of these 3 states
+        static final int NONE = 0;
+        static final int DRAG = 1;
+        static final int ZOOM = 2;
+        int mode = NONE;
+
+        // Remember some things for zooming
+        PointF start = new PointF();
+        PointF mid = new PointF();
+        float oldDist = 1f;
+        
+    	 // ----------------------------------
+
+        final float lon0 = 112.729674f;   // titik pojok kiri atas
+        final float lat0 = -7.298994f;    // untuk Go Home
+
+        // omahku    
+        final float lon =  112.762601f;
+        final float lat =  -7.392476f;
+            
+        // pasar betro baru
+        final float lat1 = -7.389847f;
+        final float lon1 = 112.760197f;
+
+        // toko roti umar bakry
+        final float lat2 = -7.381539f;
+        final float lon2 = 112.761720f;
+
+        // KUA kec. sedati
+        final float lat3 = -7.376667f;
+        final float lon3 = 112.763058f;
+
+        // Giant Rungkut
+        final float lat4 = -7.341765f;
+        final float lon4 = 112.768490f;
+
+        // Carrefour Rungkut
+        final float lat5 = -7.315319f;
+        final float lon5 = 112.770633f;
+
+        //central park gunung anyar regency
+        final float lat6 = -7.310046f;
+        final float lon6 = 112.770145f;
+
+        //Pandu Logistics
+        final float lat7 = -7.305725f;
+        final float lon7 = 112.761594f;
+
+        //Kampus Untag Surabaya
+        final float lat8 = -7.299579f;
+        final float lon8 = 112.766910f;
+
+        //rungkut mejoyo
+        final float lat9 = -7.320163f;
+        final float lon9 = 112.769303f;
+
+        //jl haji syukur
+        final float lat10 = -7.376582f;
+        final float lon10 = 112.758903f;
+
+        //Jl. Brigjend Katamso
+        final float lat11 = -7.351805f;
+        final float lon11 = 112.731868f;
+
+        //SMK 3 Surabaya
+         final float lat12 = -7.343735f;
+         final float lon12 = 112.729674f;
+         
+         //Taman Pelangi
+         final float lat13 = -7.326912f;
+         final float lon13 = 112.731323f;
+         
+         // Hotel Santika
+         final float lat14 = -7.313310f;
+         final float lon14 = 112.756578f;
+         
+         // Terminal Bus Bratang
+         final float lat15 = -7.298994f;
+         final float lon15 = 112.761759f;
+         
+         // Jl. Jemursari 
+         final float lat16 = -7.321281f;
+         final float lon16 = 112.740187f;
+         
+
+         
+         // Plaza Marina
+         final float lat18 = -7.316386f;
+         final float lon18 = 112.748737f;
+         
+         // SMAN 10 Surabaya
+         final float lat19 = -7.320164f;
+         final float lon19 = 112.740261f;
+         
+         //  SMAN 16 Surabaya
+         final float lat20 = -7.309176f;
+         final float lon20 = 112.759551f;
+         
+        
+        
+        // menentukan titik koordinat dan nama
+        private Koordinat[] mykota;        
+
+        // menentukan garis
+        private Garis[] mygaris; 
+ 
+        
+        void init_array() {
+           	mykota = new Koordinat[] {new Koordinat(lat, lon, "RUDI", 1), new Koordinat(lat1, lon1, "pasar betro", 2),
+                   new Koordinat(lat2, lon2,"toko rotiumar bakry", 3), new Koordinat(lat3, lon3,"KUA kec. sedati", 4), new Koordinat(lat4, lon4, "giant rungkut", 5),
+                   new Koordinat(lat5, lon5, "carrefour rungkut", 6),new Koordinat(lat6, lon6, "central park gunung anyar", 7),new Koordinat(lat7, lon7, "Pandu Logistic", 8),new Koordinat(lat8, lon8, "kampus untag surabaya", 9),new Koordinat(lat9, lon9, "DANY", 10),
+                   new Koordinat(lat10, lon10, "yafi", 11),new Koordinat(lat11, lon11, "GERRIT", 12),new Koordinat(lat12, lon12, "SMK 3 Surabaya", 13),
+                   new Koordinat(lat13, lon13, "Taman Pelangi", 14),new Koordinat(lat14, lon14, "Hotel Santika", 15),new Koordinat(lat15, lon15, "Terminal Bus Bratang", 16),
+                   new Koordinat(lat16, lon16, "KUNTO", 17),new Koordinat(lat18, lon18, "Plaza Marina", 18),
+                   new Koordinat(lat19, lon19, "SMAN 10 Surabaya", 19),new Koordinat(lat20, lon20, "SMAN 16 Surabaya", 20),
+                   new Koordinat(lat0, lon0, "Titik Nol", 21)
+                   } ; 
+       	
+       	    mygaris = new Garis[] {new Garis(1,2), new Garis(2,3),new Garis(3,4),new Garis(4,5),new Garis(5,6),
+                   new Garis(6,7),new Garis(7,8),new Garis(8,9),new Garis(10,6),new Garis(11,4),
+                   new Garis(12,13),new Garis(13,14),new Garis(14,15),new Garis(15,16),new Garis(16,9),
+                   new Garis(17,19),new Garis(19,18),new Garis(18,20),new Garis(20,9)};
+        }
+    	 
+            
+        
+
+    //-----------------------------------------------------
+        
+       
+     
+   	 float PLANE_WIDTH = 320*1;
+   	 float PLANE_HEIGHT = 320*1;
+   	 float xrelatif =220; //450;
+   	 float yrelatif =140; // 280;
+     private float mX=0, mY=0, oX=0, oY=0;
+     private static final float TOUCH_TOLERANCE = 4;
+   	 
+   	 
+   	 public void mydebug(String s) {
+   		if (debug) System.out.println(s);
+   	 }
+
+   	 public void proses(String asal, String tujuan, String teknik) {
+		 Toast.makeText(getApplicationContext(), "Asal: "+asal+" Tujuan: "+tujuan+" Teknik: "+teknik, Toast.LENGTH_SHORT).show();
+         // isikan proses untuk pencarian jalur terpendek di sini
+		 
+		 // disimulasikan jalur terpendek yang dilewati ditandai dengan
+		 // warna garis = 9cfb00 dan tebal garis = 2
+		 
+		 int warna = 0xffffff00; // yellow
+		 int tebal = 3;
+
+         for (int i=0; i<mygaris.length; i++) {
+        	 mygaris[i].setDefault();  // reset warna dan tebal
+	         }		 
+		 
+		 // simulasi menandai jalur yang dilewati
+         for (int i=0; i<mygaris.length/2; i++) {
+        	 mygaris[i].setWarnaTebal(warna, tebal);
+	         }
+
+		  
+	}
+
+	public void isi_list(List<String> list1, List<String> list2) {
+         Koordinat kota=null;
+
+         list1.clear();
+         list2.clear();
+         
+   		 for (int i=0; i<mykota.length; i++) {
+	            kota = mykota[i];   
+                list1.add(kota.getNama());
+                list2.add(kota.getNama());
+	        }  
+		
+	}
+
+	private void reset_param_saja() {
+   	   	 skalax = 2000.0f;  // 120
+   	   	 skalay = 2000.0f;
+   	   	 xrelatif =220; //450;
+   	   	 yrelatif =140; // 280;   		 
+   	 }
+   	 
+   	 private void reset_param(Canvas myCanvas) {
+   	    reset_param_saja();          	   	 
+        hapus_canvas(myCanvas); 
+   	 }
+
+   	 
+
+
+		private float getxlon(float lon) {
+			float x;
+			x =   ((PLANE_WIDTH/360.0f) * (180 + lon));
+			return x;
+		}
+   	    
+   	    
+		private float getPosisiX(float lon) {
+   	        float x;
+   	        
+   	        x = getxlon(lon);  	             
+   	        x *= skalax;
+   	        
+   	        x -= xrelatif;
+   	        
+   	        return x;        
+   	    }
+
+   	    
+		private float getylat(float lat) {
+			float y;
+			y = ((PLANE_HEIGHT/180.0f) * (90 - lat));
+			
+			return y;
+		}
+		
+   	    private float getPosisiY(float lat) {
+   	        float y;
+   	        y =   getylat(lat);   	        
+   	        y *= skalay;
+   	        
+   	        y -= yrelatif;   	             
+
+   	        return y;
+   	    }
+   	    
+   	    
+   	    private Koordinat getKota(int nomor) {
+   	        Koordinat kota=null;   
+   	        String tulisan;
+   	        
+   	        int nomorx=0;
+   	        boolean ketemu=false;
+ 
+   	        for (int i=0; i<mykota.length; i++) {
+   	            kota = mykota[i];   
+   	            nomorx = kota.getNomor();
+   	            
+   	            if (nomor==nomorx) {
+   	                ketemu = true;   	            	
+   	                break;
+   	            }
+   	        }  
+   	        
+   	        if (ketemu==false) {
+   	        	//tulisan = String.format("kota [%d/%d] tidak ketemu!", nomor, mykota.length);
+                //debugtoast(tulisan);   	        	
+   	        }
+   	        
+   	        return kota;
+   	    }
+   	 
+   	 
+   	    private void tampil_peta(Canvas myCanvas, boolean tampilkota) {
+   	        float x, y;
+   	        float xo=0, yo=0;
+   	        int titikAwal, titikAkhir;
+   	        Koordinat awal, akhir;
+   	        float Lat1, Lon1, Lat2, Lon2, lon, lat;  	        
+   	        int tebal, warna;
+    	    String tulisan;
+
+   	        // menampilkan titik koordinat dan nama lokasi
+   	        for (int i=0; i<mykota.length; i++) {
+   	             lon = mykota[i].getLon();
+   	             lat = mykota[i].getLat();
+   	             x = getPosisiX(lon);
+   	             y = getPosisiY(lat);           
+   	             
+   	             
+   	             if (tampilkota) {
+     	            myCanvas.drawCircle(x, y, 3, mBitmapPaint);
+   	             }
+   	             
+   	     
+   	             // tampil alamat atau nama
+                 if (tampiltext) {
+                	 myCanvas.drawText(mykota[i].getNama(), x, y, mBitmapPaint);
+                 }
+                
+   	             xo = x;
+   	             yo = y;
+   	        }
+
+   	         
+   	        
+   	        // menampilkan garis antara dua lokasi
+   	        for (int i=0; i<mygaris.length; i++) {
+   	             titikAwal = mygaris[i].getAwal();
+   	             titikAkhir = mygaris[i].getAkhir();
+   	             
+   	             warna = mygaris[i].getWarna();
+   	             tebal = mygaris[i].getTebal();
+   	             
+   	             awal = getKota(titikAwal);
+   	             akhir = getKota(titikAkhir);
+
+   	             Lon1 = awal.getLon();
+   	             Lat1 = awal.getLat();
+   	             
+   	             Lon2 = akhir.getLon();
+   	             Lat2 = akhir.getLat();
+   	             
+   	             x = getPosisiX(Lon1);
+   	             y = getPosisiY(Lat1);           
+
+   	             xo = getPosisiX(Lon2);
+   	             yo = getPosisiY(Lat2);           
+   	             
+   	            drawLine(myCanvas, xo, yo,  x, y, warna, tebal);
+   	            
+   	         
+   	  	        if (i==1)
+   	  	        	{ 
+   	  	        	 //tulisan = String.format("Skalax=%4.1f, Xrel=%4.1f, Garis xo=%9.6f yo=%9.6f, x1=%9.6f y1=%9.6f",  skalax, xrelatif, Lat1, Lon1, Lat2, Lon2);
+   	  	             //tulisan = String.format("Skalax=%4.1f, Xrel=%4.1f, Garis [%d]-[%d]",  skalax, xrelatif, titikAwal, titikAkhir);
+   	  	             //tulisan = String.format("Skalax=%4.1f, Xrel=%4.1f, Garis xo=%4.1f yo=%4.1f, x1=%4.1f y1=%4.1f",  skalax, xrelatif, xo, yo, x, y);
+                     //debugtoast(tulisan);   	  	        	
+   	  	        	}
+
+   	        }
+   	                	        
+   	        
+   	    }	    
+   	    
+   	    
+   	 private void drawLine(Canvas myCanvas, float xo, float yo, float x, float y, int warna, int tebal) {
+		    Paint paint = new Paint();
+		    paint.setColor(warna);
+		    paint.setStrokeWidth(tebal);
+	    
+		    /*int startx = 50;
+		    int starty = 50;
+		    int endx = 450;
+		    int endy = 50;
+		    
+	 	    myCanvas.drawLine(startx, starty, endx, endy, paint);
+	 	    */    
+    		myCanvas.drawLine((int) xo, (int) yo, (int) x, (int) y, paint);				
+		 }
+   	 
+
+		public void go_home(Canvas myCanvas, boolean direset, boolean tampilkota) {
+			Koordinat kota=null;
+	        float x, y, lon, lat;
+	           	        
+	         if (direset) {
+	        	 reset_param_saja();
+	             }
+	         
+	         kota = mykota[20];  // 20 = titik nol, sebagai titik yang ditampilkan pojok kiri atas   
+	         lon = kota.getLon();
+	         lat = kota.getLat();
+	         x = getxlon(lon);
+	         y = getylat(lat);         
+	        
+	         // ybaru = ylama - yrelatif;
+	         // 0 = ylama - yrelatif; 
+	         // yrelatif = ylama;
+	         
+	         xrelatif =  x*skalax;
+	         yrelatif =  y*skalay;	        
+
+            hapus_canvas(myCanvas); 	        
+	        tampil_peta(myCanvas, tampilkota);
+			
+		}
+     
+
+     private void geser_layar() {
+			float dX, dY, grad;
+			dX = oX - mX;
+			dY = oY - mY;
+			grad = dY/dX;
+			xrelatif += dX;
+			yrelatif += dY;
+		}
+
+   	 private void hapus_canvas(Canvas myCanvas) {
+         mBitmap.eraseColor(Color.TRANSPARENT);
+         myCanvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint); 		
+ 	}
+     
+   	 
+		//-----------------------------------
+
+        private void debugtoast(String msg) {            
+        	 Toast.makeText(mycontext, msg, Toast.LENGTH_SHORT).show();
+        }
+     
+
+        public MyView(Context c) {
+            super(c);
+
+            mPath = new Path();
+            init_paint();
+            init_array();
+            
+            mBitmapPaint = new Paint(Paint.DITHER_FLAG);            
+            mycontext = c; 
+            
+            //debugtoast("MyView Constructor");
+
+        }
+        
+        
+    
+
+        @Override
+       protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            mBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            mCanvas = new Canvas(mBitmap);
+
+            sudahSize = true;
+            wlebar = w;
+            htinggi = h;
+            //debugtoast("SIZE changed");
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+        	super.onDraw(canvas);         	
+      	
+            canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
+            canvas.drawPath(mPath, mPaint);
+            
+            switch (jumRedraw) {
+              case 0:
+            	if (pertama) {
+                	pertama = false;
+                	go_home(canvas, true, true);
+                }
+            	else {
+            	   tayang_peta(canvas);
+            	}
+            	break;
+            	
+              case -1: // ubah skala
+            	  jumRedraw=1;
+            	  ubahSkala = false;
+            	  go_home(canvas, false, true);
+            	break;  
+
+            }
+
+            jumRedraw++;
+        }
+
+
+        public void touch_start(float x, float y) {
+
+        	Long selisih = System.currentTimeMillis() - startTime;
+        	mPath.reset();
+            mPath.moveTo(x, y);
+            
+            mX = x;
+            mY = y;
+            oX = x;
+            oY = y;
+
+        	if(selisih <= MAX_DURATION)
+            {
+                //DOUBLE TAP
+        		// pindah ke tampilan INPUT asal dan tujuan
+        		init_layar_kedua();    
+        		
+            }   
+            
+            
+        }
+        
+        public void touch_move(float x, float y) {
+            float dx = Math.abs(x - mX);
+            float dy = Math.abs(y - mY);
+            if (dx >= TOUCH_TOLERANCE || dy >= TOUCH_TOLERANCE) {
+                mX = x;
+                mY = y;
+                
+                jumMove ++;
+                if (jumMove>5) {
+                   jumRedraw = 0;
+                   jumMove = 0;
+                }
+            }
+        }
+        
+        public void tayang_peta(Canvas myCanvas) {
+        	geser_layar();	
+            hapus_canvas(myCanvas);
+            tampil_peta(myCanvas, true);
+        	
+        }
+        
+        public void touch_up() {           
+            
+            if (pertama) {
+            	pertama = false;
+            }
+            
+            startTime = System.currentTimeMillis();
+            if (ubahSkala) jumRedraw = -1;
+            else jumRedraw = 0;            
+        }
+        
+         
+		
+    }
+    
+    private float spacing(MotionEvent event) {
+    	   float x = event.getX(0) - event.getX(1);
+    	   float y = event.getY(0) - event.getY(1);
+    	   return FloatMath.sqrt(x * x + y * y);
+    	}
+
+    	private void midPoint(PointF point, MotionEvent event) {
+    	   float x = event.getX(0) + event.getX(1);
+    	   float y = event.getY(0) + event.getY(1);
+    	   point.set(x / 2, y / 2);
+    	}    
+    
+    
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.my_g, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+        if (id == R.id.action_settings) {
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    /**
+     * A placeholder fragment containing a simple view.
+     */
+    public static class PlaceholderFragment extends Fragment {
+
+        public PlaceholderFragment() {
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                Bundle savedInstanceState) {
+            View rootView = inflater.inflate(R.layout.fragment_my_g, container, false);
+            return rootView;
+        }
+    }
+
+}
